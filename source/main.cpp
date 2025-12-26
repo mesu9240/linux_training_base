@@ -5,6 +5,7 @@
 #include <thread>
 #include <unistd.h>      // for close()
 #include <sys/socket.h>  // for socket functions
+#include <sys/ioctl.h>   // for ioctl()
 #include <linux/can.h>   // for CAN frame structure
 #include <linux/can/raw.h> // for raw CAN sockets
 #include <net/if.h>      // for ifreq structure
