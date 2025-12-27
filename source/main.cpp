@@ -4,6 +4,8 @@
 #include <chrono>
 #include <thread>
 #include <unistd.h>      // for close()
+#include <sys/mman.h> // for memory locking
+#include <sched.h>        // for real time scheduling
 #include "can0.h"
 
 using namespace std;
@@ -12,9 +14,23 @@ using namespace std::chrono;
 const string CAN_INTERFACE = "can0";
 const int SEND_ID = 0x100;
 const int RECV_ID = 0x200;
+constexpr int SENSOR_CAN_ID = 0x300;
 const milliseconds CYCLE_TIME_MS(10);
 
 int main() {
+    // Lock memory to prevent paging
+    if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
+        perror("mlockall failed");
+        return 1;
+    }
+    // Set real-time scheduling
+    struct sched_param sch_params;
+    sch_params.sched_priority = 80; // High priority
+    if (sched_setscheduler(0, SCHED_FIFO, &sch_params) != 0) {
+        perror("sched_setscheduler failed");
+        // Not fatal; continue
+    }
+
     CANSocket can(CAN_INTERFACE);
     if (!can.init()) {
         std::cerr << "Failed to initialize CAN interface\n";
@@ -49,10 +65,18 @@ int main() {
                 // receivedPayload now contains 8 bytes
                 cout << "R: " << static_cast<int>(receivedPayload[0]) << endl;
                 counter++;
-                if(counter >= 100) break; // Exit after 100 messages received;
+
             } else if (r < 0) {
                 std::cerr << "CAN read error\n";
             }
+            int r2 = can.readFrame(SENSOR_CAN_ID, receivedPayload);
+            if (r2 == 1) {
+                // Process sensor data in receivedPayload as needed
+                cout << "Sensor Data R: " << static_cast<int>(receivedPayload[0]) << endl;
+            } else if (r2 < 0) {
+                std::cerr << "CAN read error for sensor data\n";
+            }
+            if(counter >= 100) break; // Exit after 100 messages received;
             // If select returns 0 or -1, no message arrived within the instant check, and the array is unchanged, meeting the requirement.
         }
 
